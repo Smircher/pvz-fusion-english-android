@@ -105,13 +105,24 @@ directory, so run them as `python tools/<script>.py`.
   and restores the save on failure.
 
 ## Testing a build (before any push/release)
-`bash tools/test_install.sh [--clean] [apk]` installs the newest `output/*.apk` on BlueStacks
-(`127.0.0.1:5555`, via `C:\Program Files\BlueStacks_nxt\HD-Adb.exe`), backs up and keeps
-the save, launches the game, and saves a screenshot and crash log to `work/test/<timestamp>/`.
-Look at `screen.png` to check the menus are in English. `--clean` handles a copy signed with a
-different key (backup → uninstall → install → restore). BlueStacks must be running with
-**Settings → Advanced → Android Debug Bridge** on (config: `E:\BlueStacks\BlueStacks_nxt\bluestacks.conf`,
-instance `Pie64`, Android 9, arm64 supported).
+`[SERIAL=<device>] bash tools/test_install.sh [--clean] [apk]` installs the newest
+`output/*.apk`, backs up and keeps the save (`playerData.json` + `LevelData`), launches the
+game, waits for its window, and saves `screen.png` and `crash.log` to `work/test/<timestamp>/`.
+Look at the screenshot to check the text is in English. `--clean` handles a copy signed with a
+different key: it also keeps `previous.apk`, then uninstalls, installs and restores the save.
+**Ask the user before using `--clean`**, because it uninstalls their app.
+
+adb: `tools/platform-tools/adb.exe` (Windows platform-tools 37, gitignored; download it again
+from dl.google.com if missing). WSL's own adb can't reach USB or the LAN, and BlueStacks'
+`HD-Adb.exe` (1.0.36) is too old for wireless pairing.
+- **BlueStacks** (default `SERIAL=127.0.0.1:5555`): instance `Pie64`, Android 9, arm64 OK.
+  It needs **Settings → Advanced → Android Debug Bridge** on.
+- **User's phone**: Galaxy S25 Ultra, Android 16, USB serial `R5CY93N8YZJ`.
+- **User's tablet**: Galaxy Tab S10 FE (SM-X620), Android 16, 2880x1800, USB serial `R5GL40CTLCB`.
+- Both Samsung devices run the 2026-10-06 build signed with the release key. Samsung **Auto
+  Blocker** (Settings → Security and privacy) blocks adb and sideloading, so the user has to
+  turn it off for each install or update. The first launch shows a black screen for ~15–30 s
+  while the bundle loads.
 
 ## Environment notes (this machine: WSL2)
 - Android SDK at `~/android_sdk` (adb in `platform-tools/`, aapt/apksigner in `build-tools/`).

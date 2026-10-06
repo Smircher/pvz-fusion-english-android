@@ -5,25 +5,27 @@
 #   apk       default: newest output/*.apk
 #   --clean   if the installed copy has a different signing key: back up the save,
 #             uninstall, install, restore the save (like tools/update.ps1 -Clean)
-# Env: ADB=path/to/adb(.exe)   default: BlueStacks HD-Adb.exe, else adb.exe/adb on PATH
-#      SERIAL=127.0.0.1:5555   device to use (BlueStacks: enable Settings > Advanced > ADB)
-#      WAIT=25                 seconds to let the game boot before the screenshot
+# Env: ADB=path/to/adb(.exe)   default: tools/platform-tools/adb.exe, BlueStacks HD-Adb.exe,
+#                              else adb.exe/adb on PATH
+#      SERIAL=127.0.0.1:5555   device: BlueStacks (enable Settings > Advanced > ADB), or a USB
+#                              serial from `adb devices` (Samsung: turn off Auto Blocker first)
+#      WAIT=120                max seconds to wait for the game window before the screenshot
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="com.LanPiaoPiao.PlantsVsZombiesRH"
 FILES="/sdcard/Android/data/$PKG/files"
 SAVE="$FILES/playerData.json"
 SERIAL="${SERIAL:-127.0.0.1:5555}"
-WAIT="${WAIT:-25}"
+WAIT="${WAIT:-120}"
 CLEAN=""; APK=""
 for a in "$@"; do
-  case "$a" in --clean) CLEAN=1 ;; -h|--help) sed -n 2,11p "$0"; exit 0 ;; *) APK="$a" ;; esac
+  case "$a" in --clean) CLEAN=1 ;; -h|--help) sed -n 2,13p "$0"; exit 0 ;; *) APK="$a" ;; esac
 done
 APK="${APK:-$(ls -t "$ROOT"/output/*.apk 2>/dev/null | head -1 || true)}"
 [ -f "$APK" ] || { echo "ERROR: no APK found (build one first)" >&2; exit 1; }
 
 if [ -z "${ADB:-}" ]; then
-  for c in "/mnt/c/Program Files/BlueStacks_nxt/HD-Adb.exe" "$(command -v adb.exe || true)" "$(command -v adb || true)"; do
+  for c in "$ROOT/tools/platform-tools/adb.exe" "/mnt/c/Program Files/BlueStacks_nxt/HD-Adb.exe" "$(command -v adb.exe || true)" "$(command -v adb || true)"; do
     [ -n "$c" ] && [ -x "$c" ] && { ADB="$c"; break; }
   done
 fi
@@ -35,14 +37,14 @@ adb() { "$ADB" -s "$SERIAL" "$@" | tr -d '\r'; }
 TS="$(date +%Y%m%d-%H%M%S)"
 OUT="$ROOT/work/test/$TS"; mkdir -p "$OUT"
 echo "[test] adb: $ADB -> $SERIAL"
-"$ADB" connect "$SERIAL" | tr -d '\r'
+case "$SERIAL" in *:*) "$ADB" connect "$SERIAL" | tr -d '\r' ;; esac
 [ "$(adb get-state 2>/dev/null)" = device ] || {
   echo "ERROR: $SERIAL not reachable. In BlueStacks: Settings > Advanced > Android Debug Bridge ON." >&2; exit 1; }
 echo "[test] device: Android $(adb shell getprop ro.build.version.release), abi $(adb shell getprop ro.product.cpu.abilist)"
 
 HAVE_SAVE=""
 if adb shell "[ -f $SAVE ] && echo y" | grep -q y; then
-  "$ADB" -s "$SERIAL" pull "$SAVE" "$(hostpath "$OUT/playerData.json")" >/dev/null && HAVE_SAVE=1
+  "$ADB" -s "$SERIAL" pull "$SAVE" "$(hostpath "$OUT/playerData.json")" >/dev/null 2>&1 && HAVE_SAVE=1
   "$ADB" -s "$SERIAL" pull "$FILES/LevelData" "$(hostpath "$OUT")" >/dev/null 2>&1 || true
   echo "[test] save backed up -> $OUT/ (playerData.json$([ -d "$OUT/LevelData" ] && echo ' + LevelData'))"
 fi
@@ -72,10 +74,16 @@ if ! echo "$RES" | grep -q Success; then
   fi
 fi
 
-echo "[test] launching, waiting ${WAIT}s"
+echo "[test] launching (waiting up to ${WAIT}s for the game window)"
 adb logcat -c || true
-adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-sleep "$WAIT"
+adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true   # screen may have timed out
+ACT="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" | tail -1)"
+adb shell am start -n "$ACT" >/dev/null 2>&1
+for _ in $(seq 1 "$WAIT"); do
+  adb shell dumpsys window | grep -q "mCurrentFocus.*$PKG" && break
+  sleep 1
+done
+sleep 15   # first frames after focus are black while the asset bundle loads
 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/screen.png"
 echo "[test] screenshot -> $OUT/screen.png"
 if adb shell pidof "$PKG" >/dev/null; then echo "[test] game is running"; else echo "[test] WARNING: game process not running" >&2; fi
