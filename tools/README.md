@@ -28,9 +28,22 @@ the finished APK from Releases.
 | `test_patch_helpers.py` | Self-check for the regex / on-screen-text helpers (`python test_patch_helpers.py` prints `ok`). |
 | `patch_metadata.py` | Older safe in-place metadata patcher (only same-or-shorter English). Kept for reference. |
 | `patch_bundle_full.py`, `patch_bundle_phase1.py`, `patch_bundle_spike.py` | Earlier iterations, kept for history. |
-| `build.sh` | Repack + sign helper. |
+| `build.sh` | Repack + sign helper (legacy: points at an old `scripts/` layout). |
+| `config.py` | Shared paths (APK, translation, work dir); each overridable by env var (`PVZ_APK`, `PVZ_MOD`, …). |
+| `update_and_build.sh` | **One command:** sync, find the newest Chinese Android APK listed in the upstream README, resolve the matching translation (main or release tag), download, build. `--check`, `--version X`, `--no-build`, `--force`. |
+| `fetch_sources.py` | Used by the above: parses the upstream download table, resolves the translation ref, downloads the APK (MEGA built in via pycryptodome / Google Drive via gdown) to `input/`. |
+| `test_install.sh` | Install the newest build on BlueStacks/a device (keeps the save; `--clean` for a key change), launch, screenshot + crash log to `work/test/`. |
+| `sync.sh` | `git pull` this repo + clone/pull the upstream PVZF-Translation into `upstream/`. |
+| `build_release.sh` | One-command build: original APK in `input/` → `output/PvZ-Fusion-<ver>-English.apk` (deps, patch, assemble, sign). |
 
-## Rough flow
+## One-command flow
+```bash
+bash tools/update_and_build.sh          # pull, download newest APK + matching translation, build
+bash tools/update_and_build.sh --check  # just report what would be built
+```
+Or step by step: `bash tools/sync.sh`, put the original APK in `input/`, then `bash tools/build_release.sh`.
+
+## Rough flow (manual)
 ```bash
 # 1) translate the asset bundle (with English menu textures)
 python patch_bundle_v2.py --textures        # -> work/data.unity3d.v2

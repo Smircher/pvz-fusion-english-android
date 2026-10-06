@@ -14,6 +14,8 @@ debug.keystore
 # Original game & PC translation (belong to their creators — not redistributed here)
 pvzrh*.apk
 PvZ_Fusion_Translator/
+upstream/
+input/
 Game Files/
 *.unity3d
 global-metadata*.dat
